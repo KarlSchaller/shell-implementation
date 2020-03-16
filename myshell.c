@@ -15,6 +15,7 @@ Homework    : Assignment 2 Shell Implementation
 #include <dirent.h>
 #include <sys/wait.h>
 
+void printprompt();
 void cd(char **argv);
 void clr();
 void dir(char **argv);
@@ -34,14 +35,14 @@ void main(int argc, char **argv, char** envp) {
 	
 	while (1) {
 		
-		printf("myshell> ");
+		printprompt();
 		
 		size_t linesize = 32;
 		char *line = (char *)malloc(linesize * sizeof(char));
 		size_t len = getline(&line, &linesize, stdin);
 		line[len-1] = '\0';
 		
-		if (strcmp(line, "exit") == 0 || strcmp(line, "^D") == 0)
+		if (strcmp(line, "quit") == 0 || strcmp(line, "^D") == 0)
 			exit(0);
 			
 		char **argv2 = (char **)malloc((len+1)*sizeof(char *));
@@ -52,9 +53,10 @@ void main(int argc, char **argv, char** envp) {
 			
 			
 		char *command = argv2[0];
+		int pid;
 		
 		
-		// Built in commands
+		// Built-In commands
 		if (strcmp(command, "cd") == 0)
 			cd(argv2);
 		else if (strcmp(command, "clr") == 0)
@@ -71,37 +73,60 @@ void main(int argc, char **argv, char** envp) {
 			mypause();
 		
 		
-		// External commands
-		else if (fork() == 0) {	// run external command
-			// TODO
+		// External commands (PIPING AND REDIRECTION DO NOT WORK AT THE SAME TIME)
+		else if ((pid = fork()) < 0)
+			perror("Forking Error");
+		else if (pid == 0) {	
+			// TODO OUTPUT REDIRECTION SHOULD WORK WITH DIR, ENVIRON, ECHO, AND HELP TOO BUT NOT INPUT REDIRECTION
 			int i;
+			
+			// Piping
 			if ((i = argsearch(argv2, "|")) != -1) {
 				int p[2];
 				if (pipe(p) < 0) {
-					perror("Pipe error");
+					perror("Pipe Error");
 					exit(1);
 				}
-				if (fork() == 0) {
+				if ((pid = fork()) < 0)
+					perror("Forking Error");
+				else if (pid == 0) {
+					close(p[0]);
+					close(STDOUT_FILENO);
 					dup2(p[1], STDOUT_FILENO);
+					close(p[1]);
 					argv2[i] = NULL;
 				}
 				else {
+					close(p[1]);
+					close(STDIN_FILENO);
 					dup2(p[0], STDIN_FILENO);
-					argv2 = argv2 + (i+1)*sizeof(char *); // does this work?
+					close(p[0]);
+					argv2 += (i+1)*sizeof(char *); // does this work?
 				}
 			}
+			
+			// Input redirection
 			if ((i = argsearch(argv2, "<")) != -1) {
-				int infile = open(argv2[i+1], O_RDONLY);
+				int infile = open(argv2[i+1], O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
+				close(STDIN_FILENO);
 				dup2(infile, STDIN_FILENO);
+				close(infile);
 			}
+			
+			// Output redirection
 			if ((i = argsearch(argv2, ">")) != -1) {
-				int outfile = open(argv2[i+1], O_WRONLY | O_TRUNC | O_CREAT);
+				int outfile = open(argv2[i+1], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
+				close(STDOUT_FILENO);
 				dup2(outfile, STDOUT_FILENO);
+				close(outfile);
 			}
 			else if ((i = argsearch(argv2, ">>")) != -1) {
-				int outfile = open(argv2[i+1], O_WRONLY | O_APPEND | O_CREAT);
+				int outfile = open(argv2[i+1], O_WRONLY | O_CREAT | O_APPEND, S_IRWXU | S_IRWXG | S_IRWXO);
+				close(STDOUT_FILENO);
 				dup2(outfile, STDOUT_FILENO);
+				close(outfile);
 			}
+			
 			execute(argv2);
 		}
 		else if (argsearch(argv2, "&") == -1) { // wait for external command to finish TODO
@@ -116,15 +141,22 @@ void main(int argc, char **argv, char** envp) {
 	}
 }
 
+// Print the current working directory
+void printprompt() {
+	char current_dir[1024];
+	getcwd(current_dir, 1024);
+	if (current_dir)
+		printf("%s> ", current_dir);
+	else
+		printf("ERROR> ");
+}
+
 // Change the directory
 void cd(char **argv) {
-	// TODO
-	if (argv[1] != NULL && strcmp(argv[1], "</>/>>") == 0) {
-		if (chdir(argv[1]) != 0)
-			perror("no such dir");
-	}
-	else
-		chdir(getenv("HOME"));
+	if (argv[1] == NULL && chdir(getenv("HOME")) != 0)
+		perror("Could not change directory");
+	else if (chdir(argv[1]) != 0)
+		perror("Could not change directory");
 }
 	
 // Clear the screen
@@ -136,19 +168,20 @@ void clr() {
 void dir(char **argv) {
 	// TODO
 	DIR *dir;
-	if (argv[1] != NULL && strcmp(argv[1], "</>/>>") != 0)
-		dir = opendir(argv[1]);
-	else
+	if (argv[1] == NULL || strcmp(argv[1], ">") == 0 || strcmp(argv[1], ">>") == 0)
 		dir = opendir("./");
+	else
+		dir = opendir(argv[1]);
+		
 	struct dirent *s;
 	while ((s = readdir(dir)) != NULL)
-		printf("%s\t", s->d_name);
+		printf("%s\n", s->d_name);
 }
 
 // List the environment variables
 void environ(char **envp) {
 	for (int i = 0; envp[i] != NULL; i++)
-		printf(envp[i]);
+		printf("%s\n", envp[i]);
 }
 	
 // Print the user's input	
@@ -156,13 +189,13 @@ void echo() {
 	size_t linesize = 32;
 	char *line = (char *)malloc(linesize * sizeof(char));
 	getline(&line, &linesize, stdin);
-	printf(line);
+	printf("%s", line);
 	free(line);
 }
 	
 // Display the user manual
 void help() {
-	printf("manual file");
+	puts("manual file");
 }
 	
 // Pause the shell until the user presses Enter
@@ -173,29 +206,10 @@ void mypause() {
 
 // Consider input to be program invocation
 void execute(char **argv) {
-	// TODO
-	char *command = argv[0];
-	
-	// Look for file in current directory
-	int fd = open(command, O_RDONLY);
-	if (fd != -1)
-		execvp(command, argv);
-	
-	// Look for file in path
-	char *path = getenv("PATH");
-	char *paths[strlen(path)];
-	paths[0] = strtok(path, ":");
-	for (int i = 0; paths[i] != NULL; i++)
-		paths[i+1] = strtok(NULL, ":");
-	
-	for (int i = 0; paths[i] != NULL; i++) {
-		char *dir = strcat(paths[i], command);
-		fd = open(dir, O_RDONLY);
-		if (fd != -1)
-			execvp(dir, argv);
-	}
-	
-	printf("file not found");
+	if (execvp(argv[0], argv) < 0) {
+        perror("Execute Error");
+		exit(1);
+    }
 }
 
 // Search argv for key and return index or -1 if not found
