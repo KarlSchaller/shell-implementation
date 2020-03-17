@@ -19,16 +19,16 @@ void printprompt();
 void cd(char **argv);
 void clr();
 void dir(char **argv);
-void environ(char **envp);
-void echo();
-void help();
+void environ(char **argv, char **envp);
+void echo(char **argv);
+void help(char **argv);
 void mypause();
 void execute(char **argv);
 int argsearch(char **argv, char *key);
 
 void main(int argc, char **argv, char** envp) {
 
-	// Check if commands are being read from a file
+	// Check if commands are being read from a file TODO
 	if (argc > 1) {
 		int cmdfile = open(argv[1], O_RDONLY);
 		if (cmdfile < 0) {
@@ -49,7 +49,7 @@ void main(int argc, char **argv, char** envp) {
 		
 		// Initalization
 		size_t linesize = 32;
-		char *line = (char *)malloc(linesize * sizeof(char));
+		char *line = (char *)malloc(linesize);
 		size_t len = getline(&line, &linesize, stdin);
 			
 		// Parsing user input
@@ -72,20 +72,19 @@ void main(int argc, char **argv, char** envp) {
 		else if (strcmp(command, "dir") == 0)
 			dir(argv2);
 		else if (strcmp(command, "environ") == 0)
-			environ(envp);
+			environ(argv2, envp);
 		else if (strcmp(command, "echo") == 0)
-			echo();
+			echo(argv2);
 		else if (strcmp(command, "help") == 0)
-			help();
+			help(argv2);
 		else if (strcmp(command, "pause") == 0)
 			mypause();
 		
 		
-		// External commands (PIPING AND REDIRECTION DO NOT WORK AT THE SAME TIME)
+		// External commands (piping and redirection do not work at the same time)
 		else if ((pid = fork()) < 0)
 			perror("Forking Error");
 		else if (pid == 0) {	
-			// TODO OUTPUT REDIRECTION SHOULD WORK WITH DIR, ENVIRON, ECHO, AND HELP TOO BUT NOT INPUT REDIRECTION
 			int i;
 			
 			// Piping
@@ -109,7 +108,7 @@ void main(int argc, char **argv, char** envp) {
 					close(STDIN_FILENO);
 					dup2(p[0], STDIN_FILENO);
 					close(p[0]);
-					argv2 += (i+1)*sizeof(char *); // does this work?
+					argv2 = &(argv2[i+1]);
 				}
 			}
 			
@@ -130,17 +129,6 @@ void main(int argc, char **argv, char** envp) {
 				close(outfile);
 				argv2[i] = NULL;
 			}
-			/*else if ((i = argsearch(argv2, ">>")) != -1) {
-				int outfile = open(argv2[i+1], O_WRONLY | O_CREAT | O_APPEND, S_IRWXU | S_IRWXG | S_IRWXO);
-				if (infile < 0) {
-					perror("Could not open input file")
-					exit(1);
-				}
-				close(STDOUT_FILENO);
-				dup2(outfile, STDOUT_FILENO);
-				close(outfile);
-				argv2[i] = NULL;
-			}*/
 			
 			// Input redirection
 			if ((i = argsearch(argv2, "<")) != -1) {
@@ -160,7 +148,7 @@ void main(int argc, char **argv, char** envp) {
 		else if (argsearch(argv2, "&") == -1) { // wait for external command to finish TODO
 			int status = 0;
 			wait(&status);
-			printf("Child exited with status of %d\n", status);
+			//printf("Child exited with status of %d\n", status);
 		}
 		
 		
@@ -181,9 +169,11 @@ void printprompt() {
 
 // Change the directory
 void cd(char **argv) {
-	if (argv[1] == NULL && chdir(getenv("HOME")) != 0)
-		perror("Could not change directory");
-	else if (chdir(argv[1]) != 0)
+	if (argv[1] == NULL) {
+		if (chdir(getenv("HOME")) < 0)
+			perror("Could not change directory");
+	}
+	else if (chdir(argv[1]) < 0)
 		perror("Could not change directory");
 }
 	
@@ -194,36 +184,126 @@ void clr() {
 	
 // Print the contents of the current directory or a user-specified directory
 void dir(char **argv) {
-	// TODO
+	// Get pointer to file or stdout and update argv
+	int i;
+	FILE *outfp;
+	if ((i = argsearch(argv, ">")) != -1)
+		outfp = fopen(argv[i+1], "w");
+	else if ((i = argsearch(argv, ">>")) != -1)
+		outfp = fopen(argv[i+1], "a");
+	if (i == -1)
+		outfp = stdout;
+	else if (outfp == NULL) {
+		perror("Could not open output file");
+		return;
+	}
+	else
+		argv[i] = NULL;
+	
+	// Open directory
 	DIR *dir;
-	if (argv[1] == NULL || strcmp(argv[1], ">") == 0 || strcmp(argv[1], ">>") == 0)
+	if (argv[1] == NULL)
 		dir = opendir("./");
 	else
 		dir = opendir(argv[1]);
-		
+	if (dir == NULL) {
+		perror("Could not open directory");
+		return;
+	}
+	
+	// Print directory
 	struct dirent *s;
 	while ((s = readdir(dir)) != NULL)
-		printf("%s\n", s->d_name);
+		fprintf(outfp, "%s\n", s->d_name);
+	
+	if (outfp != stdout)
+		fclose(outfp);
 }
 
 // List the environment variables
-void environ(char **envp) {
+void environ(char **argv, char **envp) {
+	// Get pointer to file or stdout
+	int i;
+	FILE *outfp;
+	if ((i = argsearch(argv, ">")) != -1)
+		outfp = fopen(argv[i+1], "w");
+	else if ((i = argsearch(argv, ">>")) != -1)
+		outfp = fopen(argv[i+1], "a");
+	if (i == -1)
+		outfp = stdout;
+	else if (outfp == NULL) {
+		perror("Could not open output file");
+		return;
+	}
+	
+	// Print environment variables
 	for (int i = 0; envp[i] != NULL; i++)
-		printf("%s\n", envp[i]);
+		fprintf(outfp, "%s\n", envp[i]);
+	
+	if (outfp != stdout)
+		fclose(outfp);
 }
 	
 // Print the user's input	
-void echo() {
+void echo(char **argv) {
 	size_t linesize = 32;
-	char *line = (char *)malloc(linesize * sizeof(char));
+	char *line = (char *)malloc(linesize);
 	getline(&line, &linesize, stdin);
-	printf("%s", line);
+	
+	// Get pointer to file or stdout
+	int i;
+	FILE *outfp;
+	if ((i = argsearch(argv, ">")) != -1)
+		outfp = fopen(argv[i+1], "w");
+	else if ((i = argsearch(argv, ">>")) != -1)
+		outfp = fopen(argv[i+1], "a");
+	if (i == -1)
+		outfp = stdout;
+	else if (outfp == NULL) {
+		perror("Could not open output file");
+		return;
+	}
+	
+	// Print input
+	fprintf(outfp, "%s", line);
+	
+	if (outfp != stdout)
+		fclose(outfp);
+	
 	free(line);
 }
 	
 // Display the user manual
-void help() {
-	puts("manual file");
+void help(char **argv) {
+	// Get pointer to help file
+	FILE *helpfp = fopen("README.txt", "r");
+	if (helpfp == NULL) {
+		perror("Could not open help file");
+		return;
+	}
+	
+	// Get pointer to file or stdout
+	int i;
+	FILE *outfp;
+	if ((i = argsearch(argv, ">")) != -1)
+		outfp = fopen(argv[i+1], "w");
+	else if ((i = argsearch(argv, ">>")) != -1)
+		outfp = fopen(argv[i+1], "a");
+	if (i == -1)
+		outfp = stdout;
+	else if (outfp == NULL) {
+		perror("Could not open output file");
+		return;
+	}
+			
+	// Print help file
+	char c;
+	while ((c = fgetc(helpfp)) != EOF)
+		fputc(c, outfp);
+	fputc('\n', outfp);
+	
+	if (outfp != stdout)
+		fclose(outfp);
 }
 	
 // Pause the shell until the user presses Enter
