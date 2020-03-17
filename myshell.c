@@ -44,8 +44,14 @@ void main(int argc, char **argv, char** envp) {
 	// Read commands from user until "quit"
 	while (1) {
 		
+		if (feof(stdin)) {
+			printf("\n");
+			exit(0);
+		}
+		
 		// Print prompt
-		printprompt();
+		if (argc == 1)
+			printprompt();
 		
 		// Initalization
 		size_t linesize = 32;
@@ -66,7 +72,7 @@ void main(int argc, char **argv, char** envp) {
 		int ampersand = argsearch(argv2, "&");
 		if (ampersand != -1)
 			argv2[ampersand] = NULL;
-		if (strcmp(line, "quit") == 0 || strcmp(line, "^D") == 0)
+		if (strcmp(command, "quit") == 0)
 			exit(0);
 		else if (strcmp(command, "cd") == 0)
 			cd(argv2);
@@ -249,10 +255,6 @@ void environ(char **argv, char **envp) {
 	
 // Print the user's input	
 void echo(char **argv) {
-	size_t linesize = 32;
-	char *line = (char *)malloc(linesize);
-	getline(&line, &linesize, stdin);
-	
 	// Get pointer to file or stdout
 	int i;
 	FILE *outfp;
@@ -266,6 +268,18 @@ void echo(char **argv) {
 		perror("Could not open output file");
 		return;
 	}
+	else
+		argv[i] = NULL;
+	
+	// Get input
+	size_t linesize = 128;
+	char *line = (char *)malloc(linesize);
+	if (argv[1] != NULL) {
+		free(line);
+		line = strcat(argv[1], "\n");
+	}
+	else
+		getline(&line, &linesize, stdin);
 	
 	// Print input
 	fprintf(outfp, "%s", line);
@@ -273,13 +287,14 @@ void echo(char **argv) {
 	if (outfp != stdout)
 		fclose(outfp);
 	
-	free(line);
+	if (strcmp(line, argv[1]) != 0)
+		free(line);
 }
 	
 // Display the user manual
 void help(char **argv) {
 	// Get pointer to help file
-	FILE *helpfp = fopen("README.txt", "r");
+	FILE *helpfp = fopen("readme.txt", "r");
 	if (helpfp == NULL) {
 		perror("Could not open help file");
 		return;
