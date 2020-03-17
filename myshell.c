@@ -28,36 +28,44 @@ int argsearch(char **argv, char *key);
 
 void main(int argc, char **argv, char** envp) {
 
+	// Check if commands are being read from a file
 	if (argc > 1) {
-		int infile = open(argv[1], O_RDONLY);
-		dup2(infile, STDIN_FILENO);
+		int cmdfile = open(argv[1], O_RDONLY);
+		if (cmdfile < 0) {
+			perror("Could not open command file");
+			exit(1);
+		}
+		close(STDIN_FILENO);
+		dup2(cmdfile, STDIN_FILENO);
+		close(cmdfile);
 	}
 	
+	
+	// Read commands from user until "quit"
 	while (1) {
 		
+		// Print prompt
 		printprompt();
 		
+		// Initalization
 		size_t linesize = 32;
 		char *line = (char *)malloc(linesize * sizeof(char));
 		size_t len = getline(&line, &linesize, stdin);
-		line[len-1] = '\0';
-		
-		if (strcmp(line, "quit") == 0 || strcmp(line, "^D") == 0)
-			exit(0);
 			
+		// Parsing user input
 		char **argv2 = (char **)malloc((len+1)*sizeof(char *));
-		argv2[0] = strtok(line, " ");
-		int argc2 = 0;
-		for (; argv2[argc2] != NULL; argc2++)
-			argv2[argc2+1] = strtok(NULL, " ");
-			
-			
+		argv2[0] = strtok(line, " \t\r\n\v\f");
+		for (int argc2 = 0; argv2[argc2] != NULL; argc2++)
+			argv2[argc2+1] = strtok(NULL, " \t\r\n\v\f");
 		char *command = argv2[0];
-		int pid;
-		
+		if (!command)
+			continue;
 		
 		// Built-In commands
-		if (strcmp(command, "cd") == 0)
+		int pid;
+		if (strcmp(line, "quit") == 0 || strcmp(line, "^D") == 0)
+			exit(0);
+		else if (strcmp(command, "cd") == 0)
 			cd(argv2);
 		else if (strcmp(command, "clr") == 0)
 			clr();
@@ -105,26 +113,46 @@ void main(int argc, char **argv, char** envp) {
 				}
 			}
 			
+			// Output redirection
+			int mode = O_CREAT; // O_CREAT is a placeholder
+			if ((i = argsearch(argv2, ">")) != -1)
+				mode = O_TRUNC;
+			else if ((i = argsearch(argv2, ">>")) != -1)
+				mode = O_APPEND;
+			if (mode != O_CREAT) {
+				int outfile = open(argv2[i+1], O_WRONLY | O_CREAT | mode, S_IRWXU | S_IRWXG | S_IRWXO);
+				if (outfile < 0) {
+					perror("Could not open output file");
+					exit(1);
+				}
+				close(STDOUT_FILENO);
+				dup2(outfile, STDOUT_FILENO);
+				close(outfile);
+				argv2[i] = NULL;
+			}
+			/*else if ((i = argsearch(argv2, ">>")) != -1) {
+				int outfile = open(argv2[i+1], O_WRONLY | O_CREAT | O_APPEND, S_IRWXU | S_IRWXG | S_IRWXO);
+				if (infile < 0) {
+					perror("Could not open input file")
+					exit(1);
+				}
+				close(STDOUT_FILENO);
+				dup2(outfile, STDOUT_FILENO);
+				close(outfile);
+				argv2[i] = NULL;
+			}*/
+			
 			// Input redirection
 			if ((i = argsearch(argv2, "<")) != -1) {
-				int infile = open(argv2[i+1], O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
+				int infile = open(argv2[i+1], O_RDONLY);
+				if (infile < 0) {
+					perror("Could not open input file");
+					exit(1);
+				}
 				close(STDIN_FILENO);
 				dup2(infile, STDIN_FILENO);
 				close(infile);
-			}
-			
-			// Output redirection
-			if ((i = argsearch(argv2, ">")) != -1) {
-				int outfile = open(argv2[i+1], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
-				close(STDOUT_FILENO);
-				dup2(outfile, STDOUT_FILENO);
-				close(outfile);
-			}
-			else if ((i = argsearch(argv2, ">>")) != -1) {
-				int outfile = open(argv2[i+1], O_WRONLY | O_CREAT | O_APPEND, S_IRWXU | S_IRWXG | S_IRWXO);
-				close(STDOUT_FILENO);
-				dup2(outfile, STDOUT_FILENO);
-				close(outfile);
+				argv2[i] = NULL;
 			}
 			
 			execute(argv2);
@@ -146,7 +174,7 @@ void printprompt() {
 	char current_dir[1024];
 	getcwd(current_dir, 1024);
 	if (current_dir)
-		printf("%s> ", current_dir);
+		printf("myshell:~%s> ", current_dir);
 	else
 		printf("ERROR> ");
 }
