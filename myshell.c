@@ -26,13 +26,13 @@ void mypause();
 void execute(char **argv);
 int argsearch(char **argv, char *key);
 
-void main(int argc, char **argv, char** envp) {
+int main(int argc, char **argv, char** envp) {
 
-	// Check if commands are being read from a file
+	// Check for batchfile
 	if (argc > 1) {
 		int cmdfile = open(argv[1], O_RDONLY);
 		if (cmdfile < 0) {
-			perror("Could not open command file");
+			perror("Could not open batchfile");
 			exit(1);
 		}
 		close(STDIN_FILENO);
@@ -41,7 +41,7 @@ void main(int argc, char **argv, char** envp) {
 	}
 	
 	
-	// Read commands from user until "quit"
+	// Read commands from user until "quit" or EOF
 	while (1) {
 		
 		if (feof(stdin)) {
@@ -69,9 +69,7 @@ void main(int argc, char **argv, char** envp) {
 		
 		// Built-In commands
 		int pid;
-		int ampersand = argsearch(argv2, "&");
-		if (ampersand != -1)
-			argv2[ampersand] = NULL;
+		int ampersand;
 		if (strcmp(command, "quit") == 0)
 			exit(0);
 		else if (strcmp(command, "cd") == 0)
@@ -95,6 +93,9 @@ void main(int argc, char **argv, char** envp) {
 			perror("Forking Error");
 		else if (pid == 0) {	
 			int i;
+			ampersand = argsearch(argv2, "&");
+			if (ampersand != -1)
+				argv2[ampersand] = NULL;
 			
 			// Piping
 			if ((i = argsearch(argv2, "|")) != -1) {
@@ -170,10 +171,12 @@ void main(int argc, char **argv, char** envp) {
 void printprompt() {
 	char current_dir[1024];
 	getcwd(current_dir, 1024);
-	if (current_dir)
+	if (current_dir != NULL)
 		printf("myshell:~%s> ", current_dir);
-	else
+	else {
+		perror("Prompt error");
 		printf("ERROR> ");
+	}
 }
 
 // Change the directory
@@ -287,14 +290,14 @@ void echo(char **argv) {
 	if (outfp != stdout)
 		fclose(outfp);
 	
-	if (strcmp(line, argv[1]) != 0)
+	if (argv[1] == NULL)
 		free(line);
 }
 	
 // Display the user manual
 void help(char **argv) {
 	// Get pointer to help file
-	FILE *helpfp = fopen("readme.txt", "r");
+	FILE *helpfp = fopen("readme", "r");
 	if (helpfp == NULL) {
 		perror("Could not open help file");
 		return;
