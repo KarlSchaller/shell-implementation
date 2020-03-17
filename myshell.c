@@ -28,7 +28,7 @@ int argsearch(char **argv, char *key);
 
 void main(int argc, char **argv, char** envp) {
 
-	// Check if commands are being read from a file TODO
+	// Check if commands are being read from a file
 	if (argc > 1) {
 		int cmdfile = open(argv[1], O_RDONLY);
 		if (cmdfile < 0) {
