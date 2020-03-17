@@ -63,6 +63,9 @@ void main(int argc, char **argv, char** envp) {
 		
 		// Built-In commands
 		int pid;
+		int ampersand = argsearch(argv2, "&");
+		if (ampersand != -1)
+			argv2[ampersand] = NULL;
 		if (strcmp(line, "quit") == 0 || strcmp(line, "^D") == 0)
 			exit(0);
 		else if (strcmp(command, "cd") == 0)
@@ -145,7 +148,7 @@ void main(int argc, char **argv, char** envp) {
 			
 			execute(argv2);
 		}
-		else if (argsearch(argv2, "&") == -1) { // wait for external command to finish TODO
+		else if (argsearch(argv2, "&") == -1) { // wait for external command to finish when no trailing '&'
 			int status = 0;
 			wait(&status);
 			//printf("Child exited with status of %d\n", status);
