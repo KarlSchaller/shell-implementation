@@ -1,0 +1,93 @@
+Karl Schaller, CIS 3207, Project 2
+
+===================================
+MYSHELL MANUAL
+===================================
+
+General Use
+	Commands should be entered after the prompt in the form of
+		<command> <arguments>
+	When using redirection, redirection symbols should be put at the end,
+	with output redirection after input redirection if both are present
+		e.g. cat < in.txt > out.txt
+	Piping is supported but cannot be used with redirection
+		e.g. ls -l | more
+	An ampersand ('&') at the end of a command signals the shell to
+	immediately prompt for additional input instead of waiting for
+	the command to finish processing
+		e.g. environ > variables.txt &
+
+Built-In Commands
+	These commands are built in to the shell and do not require external
+	processes
+		cd <directory>
+			Changes the current directory to the specified directory
+			If a directory is not specified, changes the current
+			directory to the home directory
+		clr 			
+			Clears the screen
+		dir <directory>	
+			Lists the contents of the specified directory
+			If a directory is not specified, lists the contents of
+			the current directory
+		environ		
+			Lists the environment variables
+		echo <statement>
+			Prints the specified statement
+		help 			
+			Displays the manual
+		pause			
+			Pauses the shell until enter is pressed
+		quit (or cntrl D)	
+			Exits the shell
+
+External Commands
+	When entering commands not built-in to the shell, the shell will attempt
+	to run an external executable with the same name (Bash commands, files,
+	etc.)
+		ex:
+			ls
+			grep
+			cat
+			wc
+			./myprograms/myshell
+			etc.
+			.
+			.
+			.
+
+Redirection
+	Redirection symbols can be used to redirect the input and output of a
+	command
+		<command> < <file> : redirects the specified file as input to
+			the specified command
+		<command> > <file> : output from the specified command is
+			written to the specified file, replacing the file's text
+			is there is any and creating the file is it doesn't
+			exist
+		<command> >> <file> : output from the specified command is
+			written to the specified file, appending it to the
+			file's text is there is any and creating the file is it
+			doesn't exist
+	ex:
+		cat < in.txt >> out.txt : cat will receive in.txt as input and
+		print it. When it prints, it will be appended to out.txt as
+		output
+
+Piping
+	Piping can be used to redirect the output of one command as the input of
+	another command
+		<command1> <args1> | <command2> <args2> : the output produced by
+			running command1 will sent to command2, which will take
+			it as input as it runs
+	ex:
+		cat file.txt | grep lemon : cat will print file.txt to grep
+			which will search the input for "lemon"
+
+Batchfile
+	When running myshell, the shell can be invoked with a command line
+	argument
+		myshell <batchfile>
+	On startup, the file is read as if it contains a set of command lines
+	for the shell to process (each line is a command)
+	Once the end-of-file is reached, the shell will exit
